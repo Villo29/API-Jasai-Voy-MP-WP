@@ -15,18 +15,15 @@ export class UserController {
         try {
             const { nombre, correo, contrasena, telefono } = req.body;
 
-            // Verificar si el correo ya existe
             const correoExistente = await Usuario.findOne({ correo });
             if (correoExistente) {
                 console.log(`El correo ${correo} ya está registrado.`);
                 return res.status(400).json({ error: 'El correo ya está en uso.' });
             }
 
-            // Generar un código de verificación único
             const codigoVerificacion = crypto.randomBytes(3).toString('hex');
             console.log(`Código de verificación generado: ${codigoVerificacion}`);
 
-            // Crear un nuevo usuario con el código de verificación
             const usuario = new Usuario({
                 nombre,
                 correo,
@@ -37,26 +34,23 @@ export class UserController {
             await usuario.save();
             console.log(`Usuario ${nombre} guardado en la base de datos.`);
 
-            // Generar un token JWT
             const token = jwt.sign(
                 { _id: usuario._id },
                 process.env.JWT_SECRET || 'your_secret_key'
             );
             console.log(`Token JWT generado: ${token}`);
 
-            // Configurar Nodemailer con tu cuenta de Gmail
             const transporter = nodemailer.createTransport({
                 service: 'gmail',
                 auth: {
-                    user: '221263@ids.upchiapas.edu.mx', // Tu dirección de correo de Gmail
-                    pass: process.env.GMAIL_APP_PASSWORD, // Contraseña de aplicaciones de Gmail
+                    user: '221263@ids.upchiapas.edu.mx',
+                    pass: process.env.GMAIL_APP_PASSWORD,
                 },
             });
 
-            // Configurar los detalles del correo
             const mailOptions = {
                 from: '221263@ids.upchiapas.edu.mx',
-                to: correo, // Dirección de destinatario
+                to: correo,
                 subject: '¡Bienvenido a nuestra plataforma!',
                 text: `¡Hola ${nombre}!, tu código de verificación es: ${codigoVerificacion}`,
                 html: `<h1>¡Hola ${nombre}!</h1>

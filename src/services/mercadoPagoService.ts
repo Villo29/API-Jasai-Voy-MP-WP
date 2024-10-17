@@ -19,7 +19,6 @@ export class MercadoPagoService {
 
     async processWebhook(notificacion: any) {
         try {
-            // Guardar la notificación en la base de datos
             const nuevaNotificacion = {
                 action: notificacion.action || null,
                 api_version: notificacion.api_version || null,
