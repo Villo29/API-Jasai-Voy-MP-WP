@@ -3,10 +3,8 @@ import { ObjectId } from 'mongodb';
 import Usuario, { IUsuario } from '../../domain/models/usuario';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
-import { Resend } from 'resend';
+import nodemailer from 'nodemailer';
 
-
-const resend = new Resend(process.env.RESNED_API_KEY);
 
 
 export class UserController {
@@ -34,7 +32,7 @@ export class UserController {
                 correo,
                 contrasena,
                 telefono,
-                codigoVerificacion
+                codigoVerificacion,
             });
             await usuario.save();
             console.log(`Usuario ${nombre} guardado en la base de datos.`);
@@ -46,24 +44,29 @@ export class UserController {
             );
             console.log(`Token JWT generado: ${token}`);
 
-            // Configurar el correo de bienvenida
-            const emailOptions = {
-                from: process.env.EMAIL_FROM || 'default@example.com',
-                to: correo,
-                subject: '¡Bienvenido a nuestra plataforma!',
-                html: `
-                    <h1>¡Hola ${nombre}!</h1>
-                    <p>Gracias por unirte a nuestra plataforma.</p>
-                    <p>Tu código de verificación es:</p>
-                    <h2>${codigoVerificacion}</h2>
-                    <p>Por favor, úsalo para verificar tu cuenta.</p>
-                `,
-            };
-            console.log(`Enviando correo a ${correo}...`);
+            // Configurar Nodemailer con tu cuenta de Gmail
+            const transporter = nodemailer.createTransport({
+                service: 'gmail',
+                auth: {
+                    user: '221263@ids.upchiapas.edu.mx', // Tu dirección de correo de Gmail
+                    pass: process.env.GMAIL_APP_PASSWORD, // Contraseña de aplicaciones de Gmail
+                },
+            });
 
-            // Enviar el correo usando Resend
-            const emailResponse = await resend.emails.send(emailOptions);
-            console.log(`Correo enviado exitosamente:`, emailResponse);
+            // Configurar los detalles del correo
+            const mailOptions = {
+                from: '221263@ids.upchiapas.edu.mx',
+                to: correo, // Dirección de destinatario
+                subject: '¡Bienvenido a nuestra plataforma!',
+                text: `¡Hola ${nombre}!, tu código de verificación es: ${codigoVerificacion}`,
+                html: `<h1>¡Hola ${nombre}!</h1>
+                        <p>Gracias por unirte a nuestra plataforma. Tu código de verificación es:</p>
+                        <h2>${codigoVerificacion}</h2>`,
+            };
+
+            // Enviar el correo usando Nodemailer
+            const emailResponse = await transporter.sendMail(mailOptions);
+            console.log('Correo enviado exitosamente:', emailResponse);
 
             // Enviar respuesta al cliente
             res.status(201).send({ token, nombre: usuario.nombre });

@@ -1,7 +1,7 @@
 import request from 'supertest';
-import app from '../src/app'; // Adjust the path as necessary
+import { app } from '../src/infrastructure/index'; // Adjust the path as necessary to point to your main app file
 
-describe('POST /api/v1/pago', () => {
+describe('POST api/v1/mercado-pago/pago', () => {
     it('Debe crear una preferencia de pago correctamente', async () => {
         const preferenceData = {
             items: [
@@ -14,7 +14,7 @@ describe('POST /api/v1/pago', () => {
         };
 
         const response = await request(app)
-            .post('/api/v1/pago')
+            .post('api/v1/mercado-pago/pago   ')
             .send(preferenceData)
             .expect(200);  // Esperamos que la respuesta sea 200
 
