@@ -53,9 +53,15 @@ export class UserController {
                 to: correo,
                 subject: '¡Bienvenido a nuestra plataforma!',
                 text: `¡Hola ${nombre}!, tu código de verificación es: ${codigoVerificacion}`,
-                html: `<h1>¡Hola ${nombre}!</h1>
+                html: `
+                    <div style="text-align: center; font-family: Arial, sans-serif;">
+                        <h1>¡Hola ${nombre}!</h1>
                         <p>Gracias por unirte a nuestra plataforma. Tu código de verificación es:</p>
-                        <h2>${codigoVerificacion}</h2>`,
+                        <div style="display: inline-block; padding: 10px; border: 2px solid #000; border-radius: 5px;">
+                            <h2>${codigoVerificacion}</h2>
+                        </div>
+                    </div>
+                `,
             };
 
             // Enviar el correo usando Nodemailer
