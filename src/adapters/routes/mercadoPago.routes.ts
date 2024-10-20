@@ -78,7 +78,6 @@ router.post('/webhook', async (req: Request, res: Response) => {
 
                 // Si todos los detalles están disponibles
                 if (paymentId && statusDetail && currencyId && totalPaidAmount) {
-                    // Guardar los detalles del pago en la base de datos
                     await PaymentModel.create({
                         payment_id: paymentId,
                         status_detail: statusDetail,

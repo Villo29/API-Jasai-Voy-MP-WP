@@ -9,29 +9,20 @@ export class MercadoPagoService {
     async createPayment(preferenceData: any) {
         try {
             console.log('Datos recibidos en createPayment:', preferenceData);
-
-            // Crear la preferencia en Mercado Pago
             const preferenceResponse = await axios.post('https://api.mercadopago.com/checkout/preferences', preferenceData, {
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${process.env.MERCADOPAGO_ACCESS_TOKEN}`
                 }
             });
-
             const linkDePago = preferenceResponse.data.init_point;
-            const preferenceId = preferenceResponse.data.id;  // Obtenemos el `preference_id`
-
+            const preferenceId = preferenceResponse.data.id;
             let telefono = preferenceData.payer?.phone?.number;
             console.log('Número de teléfono obtenido:', telefono);
-
             if (!telefono) {
                 throw new Error('Número de teléfono no proporcionado en preferenceData.payer.phone');
             }
-
-            // Asegurarnos de que solo tenga un signo '+' al inicio
             telefono = telefono.startsWith('+') ? telefono : `+${telefono}`;
-
-            // Guardar el número de teléfono en el almacenamiento temporal
             phoneStore[preferenceId] = telefono;
 
             const numeroDestino = `whatsapp:${telefono}`;
@@ -60,25 +51,19 @@ export class MercadoPagoService {
 
                 // Verificar si la orden contiene información de pagos
                 if (orderDetails.payments && orderDetails.payments.length > 0) {
-                    const payment = orderDetails.payments[0]; // Tomamos el primer pago
+                    const payment = orderDetails.payments[0];
 
                     // Extraer los detalles del pago
                     const statusDetail = payment.status_detail;
                     const currencyId = payment.currency_id;
                     const paymentId = payment.id;
                     const totalPaidAmount = payment.total_paid_amount;
-                    const preferenceId = orderDetails.preference_id; // Usamos el `preference_id`
-
-                    // Recuperar el número de teléfono desde el almacenamiento temporal usando `preference_id`
+                    const preferenceId = orderDetails.preference_id;
                     let payerPhone = phoneStore[preferenceId];
                     console.log('Número de teléfono recuperado de almacenamiento:', payerPhone);
-
-                    // Asegurarnos de que solo tenga un signo '+' al inicio
                     payerPhone = payerPhone.startsWith('+') ? payerPhone : `+${payerPhone}`;
 
-                    // Verificar que los detalles necesarios existen
                     if (statusDetail && currencyId && paymentId && totalPaidAmount) {
-                        // Guardar los detalles del pago en la base de datos
                         await PaymentModel.create({
                             payment_id: paymentId,
                             status_detail: statusDetail,
@@ -95,12 +80,11 @@ export class MercadoPagoService {
                         if (payerPhone) {
                             const numeroDestino = `whatsapp:${payerPhone}`;
                             console.log('Enviando mensaje a:', numeroDestino);
-
-                            const mensajeWhatsApp = `Tu pago de ${currencyId} ${totalPaidAmount} ha sido acreditado exitosamente. ID de pago: ${paymentId}`;
+                            const mensajeWhatsApp = `✅ *¡Pago Acreditado!*
+                            \nTu pago de *${currencyId} ${totalPaidAmount}* ha sido acreditado con éxito.
+                            \n👉 *ID de pago:* ${paymentId}`;
                             await sendWhatsAppMessage(numeroDestino, mensajeWhatsApp);
                             console.log('Mensaje de WhatsApp enviado al cliente:', payerPhone);
-
-                            // Eliminar el número de teléfono del almacenamiento en memoria después de usarlo
                             delete phoneStore[preferenceId];
                         } else {
                             console.log('Número de teléfono no disponible para enviar el mensaje de WhatsApp.');
