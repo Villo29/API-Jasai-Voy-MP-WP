@@ -1,26 +1,43 @@
 import axios from 'axios';
-import Notification from '../domain/models/notifation';
-import { sendWhatsAppMessage } from '../services/twilioService'; // Importar Twilio Service
+import PaymentModel from '../domain/models/notifation';
+import { sendWhatsAppMessage } from '../services/twilioService';
+
+const phoneStore: { [preferenceId: string]: string } = {}; // Almacenamiento en memoria
 
 export class MercadoPagoService {
     // Método para crear un pago
     async createPayment(preferenceData: any) {
         try {
-            // Crear la preferencia de pago en Mercado Pago
+            console.log('Datos recibidos en createPayment:', preferenceData);
+
+            // Crear la preferencia en Mercado Pago
             const preferenceResponse = await axios.post('https://api.mercadopago.com/checkout/preferences', preferenceData, {
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${process.env.MERCADOPAGO_ACCESS_TOKEN}`
                 }
             });
+
             const linkDePago = preferenceResponse.data.init_point;
-            const telefono = preferenceData.payer.telefono;
+            const preferenceId = preferenceResponse.data.id;  // Obtenemos el `preference_id`
+
+            let telefono = preferenceData.payer?.phone?.number;
+            console.log('Número de teléfono obtenido:', telefono);
+
             if (!telefono) {
-                throw new Error('Número de teléfono no proporcionado en preferenceData.payer');
+                throw new Error('Número de teléfono no proporcionado en preferenceData.payer.phone');
             }
+
+            // Asegurarnos de que solo tenga un signo '+' al inicio
+            telefono = telefono.startsWith('+') ? telefono : `+${telefono}`;
+
+            // Guardar el número de teléfono en el almacenamiento temporal
+            phoneStore[preferenceId] = telefono;
+
             const numeroDestino = `whatsapp:${telefono}`;
             const mensajeWhatsApp = `Tu enlace de pago es el siguiente: ${linkDePago}`;
             await sendWhatsAppMessage(numeroDestino, mensajeWhatsApp);
+
             return preferenceResponse.data;
         } catch (error) {
             if (error instanceof Error) {
@@ -33,34 +50,116 @@ export class MercadoPagoService {
         }
     }
 
-
-
-
     // Método para procesar las notificaciones del webhook
     async processWebhook(notificacion: any) {
         try {
-            const nuevaNotificacion = {
-                action: notificacion.action || null,
-                api_version: notificacion.api_version || null,
-                data: { id: notificacion.data?.id || null },
-                date_created: notificacion.date_created || null,
-                resource: notificacion.resource || null,
-                topic: notificacion.topic,
-                id: notificacion.id || null,
-                live_mode: notificacion.live_mode !== undefined ? notificacion.live_mode : null,
-                type: notificacion.type || null
-            };
+            if (notificacion.topic === 'merchant_order' && notificacion.resource) {
+                const mercadoPagoServiceInstance = new MercadoPagoService();
+                const orderDetails = await mercadoPagoServiceInstance.getOrderDetails(notificacion.resource);
+                console.log('Detalles de la orden recibidos:', orderDetails);
 
-            await Notification.updateOne({ id: notificacion.id }, nuevaNotificacion, { upsert: true });
-            console.log('Notificación guardada en la base de datos');
+                // Verificar si la orden contiene información de pagos
+                if (orderDetails.payments && orderDetails.payments.length > 0) {
+                    const payment = orderDetails.payments[0]; // Tomamos el primer pago
 
-            // Enviar mensaje de WhatsApp después de procesar el webhook
-            const mensajeWhatsApp = `Nueva notificación recibida. ID de la notificación: ${notificacion.id}`;
-            const numeroDestino = 'whatsapp:+14155238886';
-            await sendWhatsAppMessage(numeroDestino, mensajeWhatsApp);
+                    // Extraer los detalles del pago
+                    const statusDetail = payment.status_detail;
+                    const currencyId = payment.currency_id;
+                    const paymentId = payment.id;
+                    const totalPaidAmount = payment.total_paid_amount;
+                    const preferenceId = orderDetails.preference_id; // Usamos el `preference_id`
 
+                    // Recuperar el número de teléfono desde el almacenamiento temporal usando `preference_id`
+                    let payerPhone = phoneStore[preferenceId];
+                    console.log('Número de teléfono recuperado de almacenamiento:', payerPhone);
+
+                    // Asegurarnos de que solo tenga un signo '+' al inicio
+                    payerPhone = payerPhone.startsWith('+') ? payerPhone : `+${payerPhone}`;
+
+                    // Verificar que los detalles necesarios existen
+                    if (statusDetail && currencyId && paymentId && totalPaidAmount) {
+                        // Guardar los detalles del pago en la base de datos
+                        await PaymentModel.create({
+                            payment_id: paymentId,
+                            status_detail: statusDetail,
+                            currency_id: currencyId,
+                            total_paid_amount: totalPaidAmount
+                        });
+                        console.log('Detalles del pago guardados en la base de datos:', {
+                            payment_id: paymentId,
+                            status_detail: statusDetail,
+                            currency_id: currencyId,
+                            total_paid_amount: totalPaidAmount
+                        });
+
+                        if (payerPhone) {
+                            const numeroDestino = `whatsapp:${payerPhone}`;
+                            console.log('Enviando mensaje a:', numeroDestino);
+
+                            const mensajeWhatsApp = `Tu pago de ${currencyId} ${totalPaidAmount} ha sido acreditado exitosamente. ID de pago: ${paymentId}`;
+                            await sendWhatsAppMessage(numeroDestino, mensajeWhatsApp);
+                            console.log('Mensaje de WhatsApp enviado al cliente:', payerPhone);
+
+                            // Eliminar el número de teléfono del almacenamiento en memoria después de usarlo
+                            delete phoneStore[preferenceId];
+                        } else {
+                            console.log('Número de teléfono no disponible para enviar el mensaje de WhatsApp.');
+                        }
+                    } else {
+                        console.log('Faltan algunos detalles del pago, no se guardó en la base de datos.');
+                    }
+                } else {
+                    console.log('No se encontraron pagos en los detalles de la orden.');
+                }
+            }
+        } catch (error: unknown) {
+            if (error instanceof Error) {
+                console.error('Error al procesar el webhook:', error.message);
+            } else {
+                console.error('Error desconocido al procesar el webhook:', error);
+            }
+            throw error;
+        }
+    }
+
+    async getPayment(paymentId: string) {
+        try {
+            const response = await axios.get(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
+                headers: {
+                    'Authorization': `Bearer ${process.env.MERCADOPAGO_ACCESS_TOKEN}`
+                }
+            });
+            return response.data;
         } catch (error) {
-            console.error('Error al procesar el webhook:', error);
+            console.error('Error obteniendo detalles del pago:', error);
+            throw error;
+        }
+    }
+
+    async getPaymentDetails(paymentId: string) {
+        try {
+            const response = await axios.get(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
+                headers: {
+                    'Authorization': `Bearer ${process.env.MERCADOPAGO_ACCESS_TOKEN}`
+                }
+            });
+            return response.data;
+        } catch (error) {
+            console.error('Error obteniendo detalles del pago:', error);
+            throw error;
+        }
+    }
+
+    async getOrderDetails(orderUrl: string) {
+        try {
+            const response = await axios.get(orderUrl, {
+                headers: {
+                    'Authorization': `Bearer ${process.env.MERCADOPAGO_ACCESS_TOKEN}`
+                }
+            });
+            return response.data;
+        } catch (error) {
+            console.error(`Error obteniendo detalles de la orden: ${orderUrl}`, error);
             throw error;
         }
     }
