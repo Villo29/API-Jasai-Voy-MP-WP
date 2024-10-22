@@ -24,11 +24,11 @@ describe('Pruebas unitarias - Usuario y WhatsApp', () => {
             };
 
             // Mock del comportamiento esperado al crear un usuario
-            (crearUsuario as jest.Mock).mockResolvedValue(userData);
+            crearUsuario.prototype.crearUsuario.mockResolvedValue(userData);
 
             // Realizamos la petición para crear el usuario
             const response = await request(app)
-                .post('/api/usuarios')
+                .post('/api/v1/usuarios')
                 .send(userData);
 
             // Verificamos que la respuesta sea exitosa
@@ -42,7 +42,7 @@ describe('Pruebas unitarias - Usuario y WhatsApp', () => {
             };
 
             const response = await request(app)
-                .post('/api/usuarios')
+                .post('/api/v1/usuarios')
                 .send(userData);
 
             expect(response.status).toBe(400);
