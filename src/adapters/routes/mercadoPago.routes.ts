@@ -5,7 +5,7 @@ import PaymentModel from '../../domain/models/notifation'
 
 
 const router = Router();
-const mercadoPagoService = new MercadoPagoService();  // Instancia del servicio
+const mercadoPagoService = new MercadoPagoService();
 
 // Ruta para crear una preferencia de pago
 router.post('/pago', async (req: Request, res: Response) => {
